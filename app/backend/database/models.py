@@ -94,6 +94,23 @@ class HedgeFundFlowRunCycle(Base):
     market_conditions = Column(JSON, nullable=True)  # Market data snapshot at cycle start
 
 
+class Holding(Base):
+    """Table to store user portfolio holdings"""
+    __tablename__ = "holdings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    portfolio_name = Column(String(200), nullable=False, default="Default", index=True)
+    ticker = Column(String(20), nullable=False, index=True)
+    investment_name = Column(String(300), nullable=False)
+    quantity = Column(String(50), nullable=False)  # stored as string to handle fractional shares
+    buy_price = Column(String(50), nullable=False)  # price per unit at purchase
+    cost_basis = Column(String(50), nullable=True)  # total cost (quantity * buy_price)
+    currency = Column(String(10), nullable=False, default="GBP")
+
+
 class ApiKey(Base):
     """Table to store API keys for various services"""
     __tablename__ = "api_keys"
