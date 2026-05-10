@@ -7,10 +7,12 @@ class HoldingsRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self, portfolio_name: Optional[str] = None) -> list[Holding]:
+    def get_all(self, portfolio_name: Optional[str] = None, account_id: Optional[int] = None) -> list[Holding]:
         query = self.db.query(Holding)
         if portfolio_name:
             query = query.filter(Holding.portfolio_name == portfolio_name)
+        if account_id:
+            query = query.filter(Holding.account_id == account_id)
         return query.order_by(Holding.portfolio_name, Holding.ticker).all()
 
     def get_by_id(self, holding_id: int) -> Optional[Holding]:
@@ -18,17 +20,20 @@ class HoldingsRepository:
 
     def create(self, portfolio_name: str, ticker: str, investment_name: str,
                quantity: float, buy_price: float, cost_basis: Optional[float],
-               currency: str) -> Holding:
+               currency: str, account_id: Optional[int] = None,
+               sector: Optional[str] = None) -> Holding:
         if cost_basis is None:
             cost_basis = quantity * buy_price
         holding = Holding(
             portfolio_name=portfolio_name,
+            account_id=account_id,
             ticker=ticker.upper().strip(),
             investment_name=investment_name.strip(),
             quantity=str(quantity),
             buy_price=str(buy_price),
             cost_basis=str(cost_basis),
             currency=currency.upper().strip(),
+            sector=sector.strip() if sector else None,
         )
         self.db.add(holding)
         self.db.commit()

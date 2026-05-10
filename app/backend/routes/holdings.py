@@ -20,12 +20,14 @@ def _to_response(holding) -> HoldingResponse:
     return HoldingResponse(
         id=holding.id,
         portfolio_name=holding.portfolio_name,
+        account_id=holding.account_id,
         ticker=holding.ticker,
         investment_name=holding.investment_name,
         quantity=float(holding.quantity),
         buy_price=float(holding.buy_price),
         cost_basis=float(holding.cost_basis) if holding.cost_basis else None,
         currency=holding.currency,
+        sector=holding.sector,
         created_at=holding.created_at,
         updated_at=holding.updated_at,
     )
@@ -34,10 +36,11 @@ def _to_response(holding) -> HoldingResponse:
 @router.get("", response_model=list[HoldingResponse])
 async def list_holdings(
     portfolio: Optional[str] = Query(None, description="Filter by portfolio name"),
+    account_id: Optional[int] = Query(None, description="Filter by account ID"),
     db: Session = Depends(get_db),
 ):
     repo = HoldingsRepository(db)
-    holdings = repo.get_all(portfolio_name=portfolio)
+    holdings = repo.get_all(portfolio_name=portfolio, account_id=account_id)
     return [_to_response(h) for h in holdings]
 
 
@@ -61,12 +64,14 @@ async def create_holding(data: HoldingCreate, db: Session = Depends(get_db)):
     repo = HoldingsRepository(db)
     holding = repo.create(
         portfolio_name=data.portfolio_name,
+        account_id=data.account_id,
         ticker=data.ticker,
         investment_name=data.investment_name,
         quantity=data.quantity,
         buy_price=data.buy_price,
         cost_basis=data.cost_basis,
         currency=data.currency,
+        sector=data.sector,
     )
     return _to_response(holding)
 

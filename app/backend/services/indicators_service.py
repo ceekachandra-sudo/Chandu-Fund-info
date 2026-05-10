@@ -57,6 +57,51 @@ def determine_action_label(rsi: Optional[float], trend: Optional[str]) -> str:
         return "WATCH"
 
 
+def compute_risk_score(rsi: Optional[float], trend: Optional[str],
+                       profit_loss_pct: Optional[float]) -> Optional[int]:
+    """
+    Compute a risk score from 1 (low risk) to 10 (high risk).
+    Based on RSI extremes, trend direction, and drawdown from cost basis.
+    Educational only.
+    """
+    if rsi is None and trend is None:
+        return None
+
+    score = 5  # neutral baseline
+
+    # RSI contribution: extremes add risk
+    if rsi is not None:
+        if rsi > 80:
+            score += 3
+        elif rsi > 70:
+            score += 2
+        elif rsi < 20:
+            score += 2
+        elif rsi < 30:
+            score += 1
+        elif 40 <= rsi <= 60:
+            score -= 1
+
+    # Trend contribution
+    if trend == "down":
+        score += 2
+    elif trend == "sideways":
+        score += 1
+    elif trend == "up":
+        score -= 1
+
+    # Loss magnitude contribution
+    if profit_loss_pct is not None:
+        if profit_loss_pct < -30:
+            score += 2
+        elif profit_loss_pct < -15:
+            score += 1
+        elif profit_loss_pct > 50:
+            score += 1  # concentration risk from large gains
+
+    return max(1, min(10, score))
+
+
 def _calculate_rsi(close: pd.Series, period: int = 14) -> Optional[float]:
     if len(close) < period + 1:
         return None
