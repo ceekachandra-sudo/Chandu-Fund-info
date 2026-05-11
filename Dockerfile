@@ -35,5 +35,5 @@ COPY --from=frontend-build /app/frontend/dist ./app/frontend/dist
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-
+#update fr railway
 CMD gunicorn app.backend.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300
