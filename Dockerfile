@@ -35,6 +35,5 @@ COPY --from=frontend-build /app/frontend/dist ./app/frontend/dist
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
 
-CMD ["sh", "-c", "gunicorn app.backend.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300"]
+CMD gunicorn app.backend.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300
