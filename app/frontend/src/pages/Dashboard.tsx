@@ -3,7 +3,7 @@ import { HoldingForm } from '@/components/holdings/HoldingForm';
 import { HoldingsTable } from '@/components/holdings/HoldingsTable';
 import { Button } from '@/components/ui/button';
 import { holdingsApi } from '@/services/holdings-api';
-import type { Account, AnalysisJob, AnalysisResult, DashboardHolding, DashboardResponse, HoldingCreate, AllocationItem, AccountSummaryItem, WatchlistItem } from '@/types/holdings';
+import type { Account, AnalysisJob, AnalysisMode, AnalysisResult, DashboardHolding, DashboardResponse, HoldingCreate, AllocationItem, AccountSummaryItem, WatchlistItem } from '@/types/holdings';
 import { Plus, Upload, RefreshCw, Download, Shield, Brain, Eye, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -24,6 +24,9 @@ export function Dashboard() {
   const [analysisJob, setAnalysisJob] = useState<AnalysisJob | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Analysis mode
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('quick_scan');
 
   // Watchlist state
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -157,10 +160,22 @@ export function Dashboard() {
   };
 
   const handleAnalyze = async () => {
+    if (analysisMode === 'deep_dive') {
+      setError('Deep Dive is disabled during beta to control costs. Use Quick Scan or Standard mode.');
+      return;
+    }
+
+    if (analysisMode === 'standard') {
+      const confirmed = window.confirm(
+        `Standard analysis uses AI tokens (limited to 10 runs/day).\n\nQuick Scan is free and instant. Continue with Standard?`
+      );
+      if (!confirmed) return;
+    }
+
     try {
       setAnalyzing(true);
       setError(null);
-      const job = await holdingsApi.analyzePortfolio();
+      const job = await holdingsApi.analyzePortfolio(undefined, undefined, undefined, analysisMode);
       setAnalysisJob(job);
 
       // Start polling
@@ -212,7 +227,7 @@ export function Dashboard() {
     try {
       setAnalyzing(true);
       setError(null);
-      const job = await holdingsApi.analyzeWatchlist();
+      const job = await holdingsApi.analyzeWatchlist(undefined, analysisMode);
       setAnalysisJob(job);
 
       pollRef.current = setInterval(async () => {
@@ -279,24 +294,37 @@ export function Dashboard() {
             <Button size="sm" onClick={() => setView('add')}>
               <Plus size={14} className="mr-1" /> Add Holding
             </Button>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={handleAnalyze}
-              disabled={analyzing || holdings.length === 0}
-              className="bg-purple-700 hover:bg-purple-600"
-            >
-              <Brain size={14} className={`mr-1 ${analyzing ? 'animate-pulse' : ''}`} />
-              {analyzing ? 'Analyzing...' : 'Analyze Portfolio'}
-            </Button>
+            <div className="flex items-center gap-1">
+              <select
+                value={analysisMode}
+                onChange={(e) => setAnalysisMode(e.target.value as AnalysisMode)}
+                disabled={analyzing}
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                title={analysisMode === 'quick_scan' ? 'Free — uses market data only' : analysisMode === 'standard' ? 'Uses AI (limited to 10/day)' : 'Disabled during beta'}
+              >
+                <option value="quick_scan">Quick Scan (free)</option>
+                <option value="standard">Standard — 10/day limit</option>
+                <option value="deep_dive">Deep Dive (disabled)</option>
+              </select>
+              <Button
+                size="sm"
+                variant="default"
+                onClick={handleAnalyze}
+                disabled={analyzing || holdings.length === 0}
+                className="bg-purple-700 hover:bg-purple-600"
+              >
+                <Brain size={14} className={`mr-1 ${analyzing ? 'animate-pulse' : ''}`} />
+                {analyzing ? 'Analyzing...' : 'Analyze'}
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Analysis Status Banner */}
         {analysisJob && analyzing && (
-          <div className="rounded border border-purple-800 bg-purple-900/20 px-4 py-2 text-sm text-purple-300 flex items-center gap-2">
-            <Brain size={14} className="animate-pulse" />
-            Running AI analysis — {analysisJob.status === 'running' ? 'agents processing...' : 'starting...'}
+          <div className="rounded border-l-4 border-l-blue-500 border border-border bg-card px-4 py-2 text-sm text-foreground flex items-center gap-2">
+            <Brain size={14} className="animate-pulse text-blue-500" />
+            Running {analysisJob.analysis_mode === 'quick_scan' ? 'quick scan' : analysisJob.analysis_mode === 'deep_dive' ? 'deep analysis' : 'standard analysis'} — {analysisJob.status === 'running' ? 'processing...' : 'starting...'}
             {analysisJob.total_tickers && ` (${analysisJob.completed_tickers || 0}/${analysisJob.total_tickers} tickers)`}
           </div>
         )}
@@ -309,12 +337,12 @@ export function Dashboard() {
             <SummaryCard
               label="Profit / Loss"
               value={`£${formatLarge(summary.total_profit_loss)}`}
-              className={summary.total_profit_loss >= 0 ? 'text-green-400' : 'text-red-400'}
+              className={summary.total_profit_loss >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}
             />
             <SummaryCard
               label="Return"
               value={summary.total_profit_loss_pct !== null ? `${summary.total_profit_loss_pct.toFixed(2)}%` : '—'}
-              className={summary.total_profit_loss_pct !== null && summary.total_profit_loss_pct >= 0 ? 'text-green-400' : 'text-red-400'}
+              className={summary.total_profit_loss_pct !== null && summary.total_profit_loss_pct >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}
             />
             <RiskCard score={summary.overall_risk_score} />
           </div>
@@ -344,9 +372,9 @@ export function Dashboard() {
 
         {/* Error */}
         {error && (
-          <div className="rounded border border-red-800 bg-red-900/20 px-4 py-2 text-sm text-red-300">
+          <div className="rounded border-l-4 border-l-red-600 border border-border bg-card px-4 py-2 text-sm text-foreground">
             {error}
-            <button className="ml-2 underline" onClick={() => setError(null)}>dismiss</button>
+            <button className="ml-2 underline text-red-600 dark:text-red-400" onClick={() => setError(null)}>dismiss</button>
           </div>
         )}
 
@@ -438,9 +466,9 @@ function RiskCard({ score }: { score: number | null }) {
   if (score === null) return <SummaryCard label="Risk Score" value="—" />;
 
   const getColor = (s: number) => {
-    if (s <= 3) return 'text-green-400';
-    if (s <= 6) return 'text-yellow-400';
-    return 'text-red-400';
+    if (s <= 3) return 'text-green-700 dark:text-green-400';
+    if (s <= 6) return 'text-amber-700 dark:text-amber-400';
+    return 'text-red-700 dark:text-red-400';
   };
 
   const getLabel = (s: number) => {
@@ -471,7 +499,7 @@ function AccountCard({ account, onSelect }: { account: AccountSummaryItem; onSel
       <div className="text-sm font-medium mt-0.5">{account.label}</div>
       <div className="flex justify-between mt-2 text-xs">
         <span className="text-muted-foreground">{account.holdings_count} holdings</span>
-        <span className={account.profit_loss >= 0 ? 'text-green-400' : 'text-red-400'}>
+        <span className={account.profit_loss >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
           {account.profit_loss_pct !== null ? `${account.profit_loss_pct > 0 ? '+' : ''}${account.profit_loss_pct.toFixed(1)}%` : '—'}
         </span>
       </div>

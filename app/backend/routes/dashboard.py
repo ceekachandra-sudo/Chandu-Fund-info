@@ -8,6 +8,7 @@ from app.backend.database.models import Account
 from app.backend.repositories.holdings_repository import HoldingsRepository
 from app.backend.services.indicators_service import compute_indicators, determine_action_label, compute_risk_score
 from app.backend.services.api_key_service import ApiKeyService
+from app.backend.portfolio.sector_fallback import get_sector_fallback
 from app.backend.models.holdings import (
     DashboardHolding, DashboardResponse,
     AllocationItem, AccountSummaryItem,
@@ -84,7 +85,7 @@ async def get_dashboard(
         )
 
         # Allocation tracking
-        sector = h.sector or "Unclassified"
+        sector = h.sector or get_sector_fallback(h.ticker)
         sector_values[sector] += holding_value
 
         if h.account_id:

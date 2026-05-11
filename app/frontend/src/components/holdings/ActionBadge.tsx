@@ -5,11 +5,11 @@ interface ActionBadgeProps {
 }
 
 const colorMap: Record<string, string> = {
-  'HOLD': 'bg-green-900/50 text-green-300 border-green-700',
-  'WATCH': 'bg-yellow-900/50 text-yellow-300 border-yellow-700',
-  'REVIEW': 'bg-orange-900/50 text-orange-300 border-orange-700',
-  'ADD CAUTIOUSLY': 'bg-blue-900/50 text-blue-300 border-blue-700',
-  'REDUCE / REVIEW EXIT': 'bg-red-900/50 text-red-300 border-red-700',
+  'HOLD': 'bg-green-100 text-green-800 border-green-300 dark:bg-green-950 dark:text-green-200 dark:border-green-700',
+  'WATCH': 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200 dark:border-amber-700',
+  'REVIEW': 'bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-950 dark:text-orange-200 dark:border-orange-700',
+  'ADD CAUTIOUSLY': 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-700',
+  'REDUCE / REVIEW EXIT': 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-200 dark:border-red-700',
 };
 
 export function ActionBadge({ label }: ActionBadgeProps) {

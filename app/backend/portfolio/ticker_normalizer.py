@@ -1,14 +1,15 @@
 """Broker ticker normalization for AJ Bell and similar UK brokers.
 
-Maps broker-format tickers to the format expected by Financial Datasets API.
+Maps broker-format tickers to the format expected by data providers.
+LSE-listed tickers are marked as supported since Yahoo Finance provides
+price, fundamental, and news data for them.
 """
 
 # Explicit mapping for known UK/special tickers
 BROKER_TO_ANALYSIS: dict[str, str] = {
     "BRK.B": "BRK-B",
     "BRK.A": "BRK-A",
-    # UK ETFs / LSE-listed (append .L for Yahoo-style, but Financial Datasets
-    # uses plain tickers for US-listed only — these are unsupported)
+    # UK ETFs / LSE-listed — these use Yahoo Finance via the provider layer
     "ISF": "ISF.L",
     "SGLN": "SGLN.L",
     "SSLN": "SSLN.L",
@@ -26,7 +27,6 @@ UNSUPPORTED_PATTERNS = {
     "B523MH2",  # SEDOL-style
 }
 
-# LSE suffix indicates UK-listed — generally unsupported by Financial Datasets API
 LSE_SUFFIX = ".L"
 
 
@@ -46,19 +46,24 @@ def normalize_ticker(broker_ticker: str) -> tuple[str, bool]:
     # Check explicit mapping
     if ticker in BROKER_TO_ANALYSIS:
         mapped = BROKER_TO_ANALYSIS[ticker]
-        # If mapped to .L suffix, it's UK-listed and unsupported by primary data source
-        supported = not mapped.endswith(LSE_SUFFIX)
-        return mapped, supported
+        # LSE tickers are now supported via Yahoo Finance provider
+        return mapped, True
 
-    # If ticker already has .L suffix, mark as unsupported
+    # If ticker already has .L suffix, it's LSE — supported via Yahoo Finance
     if ticker.endswith(LSE_SUFFIX):
-        return ticker, False
+        return ticker, True
 
     # US-listed tickers pass through as-is (NVDA, AAPL, SCCO, etc.)
     return ticker, True
 
 
+def is_lse_ticker(ticker: str) -> bool:
+    """Check if a ticker is LSE-listed (ends in .L after normalization)."""
+    normalized, _ = normalize_ticker(ticker)
+    return normalized.upper().endswith(LSE_SUFFIX)
+
+
 def is_us_ticker(ticker: str) -> bool:
     """Quick check if a ticker is likely US-listed."""
     normalized, supported = normalize_ticker(ticker)
-    return supported
+    return supported and not normalized.upper().endswith(LSE_SUFFIX)

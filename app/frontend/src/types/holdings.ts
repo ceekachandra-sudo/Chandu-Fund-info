@@ -117,6 +117,14 @@ export interface AccountCreate {
   label?: string;
 }
 
+export interface PriceEstimate {
+  estimated_next_price: number;
+  expected_low: number;
+  expected_high: number;
+  estimate_confidence: 'Low' | 'Moderate' | 'High';
+  estimate_reason: string;
+}
+
 export interface AnalysisResult {
   id: number;
   holding_id: number | null;
@@ -134,8 +142,11 @@ export interface AnalysisResult {
   positive_factors: string[];
   risk_factors: string[];
   uncertainties: string[];
+  price_estimate: PriceEstimate | null;
   created_at: string | null;
 }
+
+export type AnalysisMode = 'quick_scan' | 'standard' | 'deep_dive';
 
 export interface AnalysisJob {
   job_id: number;
@@ -146,6 +157,11 @@ export interface AnalysisJob {
   error_message: string | null;
   results: AnalysisResult[] | null;
   created_at: string | null;
+  analysis_mode: AnalysisMode | null;
+  model_name: string | null;
+  agent_count: number | null;
+  estimated_tokens: number | null;
+  elapsed_seconds: number | null;
 }
 
 export interface WatchlistItem {

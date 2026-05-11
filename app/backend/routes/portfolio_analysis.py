@@ -3,6 +3,7 @@
 import json
 import threading
 import logging
+import time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -19,11 +20,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio")
 
 
-def _run_analysis_job(job_id: int, holding_ids: list[int] | None, model_name: str, model_provider: str):
+def _run_analysis_job(
+    job_id: int,
+    holding_ids: list[int] | None,
+    model_name: str,
+    model_provider: str,
+    analysis_mode: str,
+):
     """Background thread that runs the agent pipeline."""
-    from app.backend.portfolio.portfolio_agent_service import run_portfolio_analysis
+    from app.backend.portfolio.portfolio_agent_service import run_portfolio_analysis, ApiKeyMissingError
+    from app.backend.portfolio.analysis_modes import AnalysisMode, TIER_AGENTS, ESTIMATED_TOKENS
 
     db = SessionLocal()
+    start_time = time.time()
     try:
         job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
         if not job:
@@ -36,12 +45,36 @@ def _run_analysis_job(job_id: int, holding_ids: list[int] | None, model_name: st
             holding_ids=holding_ids,
             model_name=model_name,
             model_provider=model_provider,
+            analysis_mode=analysis_mode,
         )
 
+        elapsed = time.time() - start_time
+
+        # Compute token usage stats
+        mode = AnalysisMode(analysis_mode) if analysis_mode in [m.value for m in AnalysisMode] else AnalysisMode.QUICK_SCAN
+        tier_agents = TIER_AGENTS.get(mode, [])
+        agent_count = len(tier_agents) if tier_agents else (18 if mode == AnalysisMode.DEEP_DIVE else 0)
+        est_tokens_per_ticker = ESTIMATED_TOKENS.get(mode, 0)
+        total_tickers_analyzed = len(results)
+
         job.status = "completed"
-        job.completed_tickers = len(results)
+        job.completed_tickers = total_tickers_analyzed
         job.result_ids = json.dumps([r["id"] for r in results])
+        job.analysis_mode = analysis_mode
+        job.model_name = model_name
+        job.agent_count = agent_count
+        job.estimated_tokens = est_tokens_per_ticker * total_tickers_analyzed
+        job.elapsed_seconds = round(elapsed, 1)
         db.commit()
+
+    except ApiKeyMissingError as e:
+        logger.error(f"Analysis job {job_id} failed — API key missing: {e}")
+        job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error_message = f"API_KEY_MISSING: {e}"
+            job.elapsed_seconds = round(time.time() - start_time, 1)
+            db.commit()
 
     except Exception as e:
         logger.error(f"Analysis job {job_id} failed: {e}")
@@ -49,6 +82,7 @@ def _run_analysis_job(job_id: int, holding_ids: list[int] | None, model_name: st
         if job:
             job.status = "failed"
             job.error_message = str(e)[:1000]
+            job.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
     finally:
         db.close()
@@ -56,8 +90,16 @@ def _run_analysis_job(job_id: int, holding_ids: list[int] | None, model_name: st
 
 @router.post("/analyze", response_model=AnalysisJobResponse)
 async def analyze_portfolio(data: AnalyzeRequest, db: Session = Depends(get_db)):
-    """Start async portfolio analysis using all hedge-fund agents."""
-    # Count tickers to analyze
+    """Start async portfolio analysis.
+
+    Modes: quick_scan (default, zero tokens), standard (4 agents), deep_dive (all agents).
+    """
+    from app.backend.services.rate_limiter import check_analysis_allowed, record_analysis
+
+    allowed, reason = check_analysis_allowed(data.analysis_mode)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
+
     if data.holding_ids:
         total = len(data.holding_ids)
     else:
@@ -66,21 +108,23 @@ async def analyze_portfolio(data: AnalyzeRequest, db: Session = Depends(get_db))
     if total == 0:
         raise HTTPException(status_code=400, detail="No holdings to analyze")
 
-    # Create job record
+    record_analysis(data.analysis_mode)
+
     job = AnalysisJob(
         status="pending",
         job_type="portfolio",
         total_tickers=total,
         completed_tickers=0,
+        analysis_mode=data.analysis_mode,
+        model_name=data.model_name,
     )
     db.add(job)
     db.commit()
     db.refresh(job)
 
-    # Launch background thread
     thread = threading.Thread(
         target=_run_analysis_job,
-        args=(job.id, data.holding_ids, data.model_name, data.model_provider),
+        args=(job.id, data.holding_ids, data.model_name, data.model_provider, data.analysis_mode),
         daemon=True,
     )
     thread.start()
@@ -91,6 +135,8 @@ async def analyze_portfolio(data: AnalyzeRequest, db: Session = Depends(get_db))
         job_type=job.job_type,
         total_tickers=job.total_tickers,
         completed_tickers=0,
+        analysis_mode=data.analysis_mode,
+        model_name=data.model_name,
         created_at=job.created_at,
     )
 
@@ -119,6 +165,11 @@ async def get_analysis_job(job_id: int, db: Session = Depends(get_db)):
         error_message=job.error_message,
         results=results,
         created_at=job.created_at,
+        analysis_mode=job.analysis_mode,
+        model_name=job.model_name,
+        agent_count=job.agent_count,
+        estimated_tokens=job.estimated_tokens,
+        elapsed_seconds=job.elapsed_seconds,
     )
 
 
@@ -147,7 +198,21 @@ async def get_latest_analysis(db: Session = Depends(get_db)):
     return [_to_response(r) for r in results]
 
 
+@router.get("/analysis/limits")
+async def get_analysis_limits():
+    """Get current rate limit usage and availability."""
+    from app.backend.services.rate_limiter import get_usage_stats
+    return get_usage_stats()
+
+
 def _to_response(r: PortfolioAnalysisResult) -> AnalysisResultResponse:
+    price_estimate = None
+    if r.price_estimate:
+        try:
+            price_estimate = json.loads(r.price_estimate)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return AnalysisResultResponse(
         id=r.id,
         holding_id=r.holding_id,
@@ -165,5 +230,6 @@ def _to_response(r: PortfolioAnalysisResult) -> AnalysisResultResponse:
         positive_factors=json.loads(r.positive_factors) if r.positive_factors else [],
         risk_factors=json.loads(r.risk_factors) if r.risk_factors else [],
         uncertainties=json.loads(r.uncertainties) if r.uncertainties else [],
+        price_estimate=price_estimate,
         created_at=r.created_at,
     )

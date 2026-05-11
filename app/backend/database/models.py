@@ -165,6 +165,7 @@ class PortfolioAnalysisResult(Base):
     positive_factors = Column(Text, nullable=True)  # JSON array
     risk_factors = Column(Text, nullable=True)  # JSON array
     uncertainties = Column(Text, nullable=True)  # JSON array
+    price_estimate = Column(Text, nullable=True)  # JSON object: experimental next-price estimate
 
 
 class AnalysisJob(Base):
@@ -181,6 +182,13 @@ class AnalysisJob(Base):
     completed_tickers = Column(Integer, nullable=True, default=0)
     error_message = Column(Text, nullable=True)
     result_ids = Column(Text, nullable=True)  # JSON array of PortfolioAnalysisResult IDs
+
+    # Token optimization fields
+    analysis_mode = Column(String(20), nullable=True, default="quick_scan")
+    model_name = Column(String(50), nullable=True)
+    agent_count = Column(Integer, nullable=True, default=0)
+    estimated_tokens = Column(Integer, nullable=True, default=0)
+    elapsed_seconds = Column(Float, nullable=True)
 
 
 class ApiKey(Base):

@@ -132,11 +132,12 @@ export const holdingsApi = {
   },
 
   // Portfolio Analysis
-  async analyzePortfolio(holdingIds?: number[], modelName?: string, modelProvider?: string): Promise<AnalysisJob> {
+  async analyzePortfolio(holdingIds?: number[], modelName?: string, modelProvider?: string, analysisMode?: string): Promise<AnalysisJob> {
     const body: Record<string, unknown> = {};
     if (holdingIds) body.holding_ids = holdingIds;
     if (modelName) body.model_name = modelName;
     if (modelProvider) body.model_provider = modelProvider;
+    if (analysisMode) body.analysis_mode = analysisMode;
     const res = await fetch(`${API_BASE_URL}/portfolio/analyze`, {
       method: 'POST',
       headers: getHeaders(),
@@ -183,9 +184,10 @@ export const holdingsApi = {
     if (!res.ok) throw new Error(`Failed to remove from watchlist: ${res.status}`);
   },
 
-  async analyzeWatchlist(watchlistIds?: number[]): Promise<AnalysisJob> {
+  async analyzeWatchlist(watchlistIds?: number[], analysisMode?: string): Promise<AnalysisJob> {
     const body: Record<string, unknown> = {};
     if (watchlistIds) body.watchlist_ids = watchlistIds;
+    if (analysisMode) body.analysis_mode = analysisMode;
     const res = await fetch(`${API_BASE_URL}/watchlist/analyze`, {
       method: 'POST',
       headers: getHeaders(),

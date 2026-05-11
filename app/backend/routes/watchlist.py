@@ -43,11 +43,19 @@ async def remove_from_watchlist(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Watchlist item not found")
 
 
-def _run_watchlist_analysis_job(job_id: int, watchlist_ids: list[int] | None, model_name: str, model_provider: str):
+def _run_watchlist_analysis_job(
+    job_id: int,
+    watchlist_ids: list[int] | None,
+    model_name: str,
+    model_provider: str,
+    analysis_mode: str = "quick_scan",
+):
     """Background thread for watchlist analysis."""
+    import time
     from app.backend.portfolio.portfolio_agent_service import run_portfolio_analysis
 
     db = SessionLocal()
+    start_time = time.time()
     try:
         job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
         if not job:
@@ -55,7 +63,6 @@ def _run_watchlist_analysis_job(job_id: int, watchlist_ids: list[int] | None, mo
         job.status = "running"
         db.commit()
 
-        # If no specific IDs, analyze all watchlist items
         if not watchlist_ids:
             all_items = db.query(Watchlist).all()
             watchlist_ids = [w.id for w in all_items]
@@ -65,11 +72,13 @@ def _run_watchlist_analysis_job(job_id: int, watchlist_ids: list[int] | None, mo
             watchlist_ids=watchlist_ids,
             model_name=model_name,
             model_provider=model_provider,
+            analysis_mode=analysis_mode,
         )
 
         job.status = "completed"
         job.completed_tickers = len(results)
         job.result_ids = json.dumps([r["id"] for r in results])
+        job.elapsed_seconds = round(time.time() - start_time, 1)
         db.commit()
 
     except Exception as e:
@@ -78,6 +87,7 @@ def _run_watchlist_analysis_job(job_id: int, watchlist_ids: list[int] | None, mo
         if job:
             job.status = "failed"
             job.error_message = str(e)[:1000]
+            job.elapsed_seconds = round(time.time() - start_time, 1)
             db.commit()
     finally:
         db.close()
@@ -86,6 +96,12 @@ def _run_watchlist_analysis_job(job_id: int, watchlist_ids: list[int] | None, mo
 @router.post("/analyze", response_model=AnalysisJobResponse)
 async def analyze_watchlist(data: WatchlistAnalyzeRequest, db: Session = Depends(get_db)):
     """Start async watchlist analysis using all hedge-fund agents."""
+    from app.backend.services.rate_limiter import check_analysis_allowed, record_analysis
+
+    allowed, reason = check_analysis_allowed(data.analysis_mode)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
+
     if data.watchlist_ids:
         total = len(data.watchlist_ids)
     else:
@@ -93,6 +109,8 @@ async def analyze_watchlist(data: WatchlistAnalyzeRequest, db: Session = Depends
 
     if total == 0:
         raise HTTPException(status_code=400, detail="No watchlist items to analyze")
+
+    record_analysis(data.analysis_mode)
 
     job = AnalysisJob(
         status="pending",
@@ -106,7 +124,7 @@ async def analyze_watchlist(data: WatchlistAnalyzeRequest, db: Session = Depends
 
     thread = threading.Thread(
         target=_run_watchlist_analysis_job,
-        args=(job.id, data.watchlist_ids, data.model_name, data.model_provider),
+        args=(job.id, data.watchlist_ids, data.model_name, data.model_provider, data.analysis_mode),
         daemon=True,
     )
     thread.start()
@@ -117,6 +135,7 @@ async def analyze_watchlist(data: WatchlistAnalyzeRequest, db: Session = Depends
         job_type=job.job_type,
         total_tickers=job.total_tickers,
         completed_tickers=0,
+        analysis_mode=data.analysis_mode,
         created_at=job.created_at,
     )
 

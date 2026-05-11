@@ -1,8 +1,40 @@
+import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Optional
 from src.tools.api import get_prices, prices_to_df
+from app.backend.portfolio.ticker_normalizer import normalize_ticker
+
+logger = logging.getLogger(__name__)
+
+
+def _fetch_yfinance_prices(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """Fallback: fetch price data from Yahoo Finance via yfinance."""
+    try:
+        import yfinance as yf
+        data = yf.download(ticker, start=start_date, end=end_date, progress=False, auto_adjust=True)
+        if data.empty:
+            return pd.DataFrame()
+        df = data.reset_index()
+        df.columns = [c[0].lower() if isinstance(c, tuple) else c.lower() for c in df.columns]
+        df = df.rename(columns={"date": "Date"})
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+        numeric_cols = ["open", "close", "high", "low", "volume"]
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        df.sort_index(inplace=True)
+        return df
+    except Exception as e:
+        logger.warning("yfinance fallback failed for %s: %s", ticker, e)
+        return pd.DataFrame()
+
+
+def _is_gbp_pence_ticker(analysis_ticker: str) -> bool:
+    """Yahoo Finance returns LSE-listed prices in GBp (pence). Detect these."""
+    return analysis_ticker.upper().endswith(".L")
 
 
 def compute_indicators(ticker: str, api_key: Optional[str] = None) -> dict:
@@ -13,13 +45,40 @@ def compute_indicators(ticker: str, api_key: Optional[str] = None) -> dict:
     end_date = datetime.now().strftime("%Y-%m-%d")
     start_date = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
 
-    prices = get_prices(ticker=ticker, start_date=start_date, end_date=end_date, api_key=api_key)
-    if not prices:
-        return {}
+    analysis_ticker, supported = normalize_ticker(ticker)
 
-    df = prices_to_df(prices)
+    df = pd.DataFrame()
+    used_yfinance = False
+
+    if supported:
+        prices = get_prices(ticker=analysis_ticker, start_date=start_date, end_date=end_date, api_key=api_key)
+        if prices:
+            df = prices_to_df(prices)
+
+    # Fallback to yfinance if primary source returned nothing
+    if df.empty or len(df) < 14:
+        yf_ticker = analysis_ticker
+        df = _fetch_yfinance_prices(yf_ticker, start_date, end_date)
+        if not df.empty:
+            used_yfinance = True
+
     if df.empty or len(df) < 14:
         return {}
+
+    # Yahoo Finance returns LSE prices in GBp (pence) — convert to GBP
+    if used_yfinance and _is_gbp_pence_ticker(analysis_ticker):
+        for col in ["open", "close", "high", "low"]:
+            if col in df.columns:
+                df[col] = df[col] / 100.0
+
+    # Defensive: if prices from src.tools.api still look like pence for .L tickers
+    # (e.g. ISF.L showing 800+ instead of ~8), apply conversion
+    if not used_yfinance and _is_gbp_pence_ticker(analysis_ticker):
+        sample_price = float(df["close"].iloc[-1])
+        if sample_price > 100:
+            for col in ["open", "close", "high", "low"]:
+                if col in df.columns:
+                    df[col] = df[col] / 100.0
 
     close = df["close"]
     current_price = float(close.iloc[-1])
