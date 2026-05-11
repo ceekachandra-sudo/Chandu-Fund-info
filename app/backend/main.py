@@ -19,7 +19,13 @@ load_dotenv(_env_path)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AI Hedge Fund API", description="Backend API for AI Hedge Fund", version="0.1.0")
+app = FastAPI(
+    title="AI Hedge Fund API",
+    description="Backend API for AI Hedge Fund",
+    version="0.1.0",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
+)
 
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
@@ -43,7 +49,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
-# Include API routes
+# Include API routes (these take priority over SPA catch-all)
 app.include_router(api_router)
 
 # Serve frontend static build in production
@@ -51,9 +57,13 @@ _static_dir = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=str(_static_dir / "assets")), name="static-assets")
 
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(str(_static_dir / "index.html"))
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        """Serve the React SPA for any non-API route."""
+        """Serve static file if it exists, otherwise fallback to index.html for SPA routing."""
         file_path = _static_dir / full_path
         if file_path.is_file():
             return FileResponse(str(file_path))
@@ -62,12 +72,10 @@ if _static_dir.is_dir():
 
 @app.on_event("startup")
 async def startup_event():
-    """Log startup info."""
     logger.info("AI Hedge Fund API starting up")
     db_url = os.environ.get("DATABASE_URL", "sqlite (local)")
     logger.info(f"Database: {'PostgreSQL' if 'postgresql' in db_url else 'SQLite'}")
 
-    # Check Ollama only if not in production
     if not os.environ.get("RAILWAY_ENVIRONMENT"):
         try:
             from app.backend.services.ollama_service import ollama_service
