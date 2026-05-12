@@ -12,8 +12,7 @@ import type {
   WatchlistItem,
   WatchlistCreate,
 } from '@/types/holdings';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_ROUTES, ApiError, fetchWithTimeout } from '@/services/api-routes';
 
 function getHeaders(): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -24,6 +23,14 @@ function getHeaders(): Record<string, string> {
   return headers;
 }
 
+async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetchWithTimeout(url, options);
+  if (!res.ok) {
+    throw new ApiError(`Request failed: ${res.status} ${res.statusText}`, res.status, url);
+  }
+  return res.json();
+}
+
 export const holdingsApi = {
   // Holdings
   async listHoldings(portfolio?: string, accountId?: number): Promise<Holding[]> {
@@ -31,59 +38,46 @@ export const holdingsApi = {
     if (portfolio) params.set('portfolio', portfolio);
     if (accountId) params.set('account_id', String(accountId));
     const qs = params.toString() ? `?${params}` : '';
-    const res = await fetch(`${API_BASE_URL}/holdings${qs}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch holdings: ${res.status}`);
-    return res.json();
+    return apiRequest<Holding[]>(`${API_ROUTES.holdings.list}${qs}`, { headers: getHeaders() });
   },
 
   async listPortfolios(): Promise<string[]> {
-    const res = await fetch(`${API_BASE_URL}/holdings/portfolios`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch portfolios: ${res.status}`);
-    return res.json();
+    return apiRequest<string[]>(API_ROUTES.holdings.portfolios, { headers: getHeaders() });
   },
 
   async getHolding(id: number): Promise<Holding> {
-    const res = await fetch(`${API_BASE_URL}/holdings/${id}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch holding: ${res.status}`);
-    return res.json();
+    return apiRequest<Holding>(API_ROUTES.holdings.detail(id), { headers: getHeaders() });
   },
 
   async createHolding(data: HoldingCreate): Promise<Holding> {
-    const res = await fetch(`${API_BASE_URL}/holdings`, {
+    return apiRequest<Holding>(API_ROUTES.holdings.list, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to create holding: ${res.status}`);
-    return res.json();
   },
 
   async updateHolding(id: number, data: HoldingUpdate): Promise<Holding> {
-    const res = await fetch(`${API_BASE_URL}/holdings/${id}`, {
+    return apiRequest<Holding>(API_ROUTES.holdings.detail(id), {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to update holding: ${res.status}`);
-    return res.json();
   },
 
   async deleteHolding(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/holdings/${id}`, {
+    await fetchWithTimeout(API_ROUTES.holdings.detail(id), {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error(`Failed to delete holding: ${res.status}`);
   },
 
   async importCsv(data: HoldingImportRequest): Promise<HoldingImportResponse> {
-    const res = await fetch(`${API_BASE_URL}/holdings/import-csv`, {
+    return apiRequest<HoldingImportResponse>(API_ROUTES.holdings.importCsv, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to import CSV: ${res.status}`);
-    return res.json();
   },
 
   // Dashboard
@@ -92,34 +86,27 @@ export const holdingsApi = {
     if (portfolio) params.set('portfolio', portfolio);
     if (accountId) params.set('account_id', String(accountId));
     const qs = params.toString() ? `?${params}` : '';
-    const res = await fetch(`${API_BASE_URL}/dashboard${qs}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
-    return res.json();
+    return apiRequest<DashboardResponse>(`${API_ROUTES.dashboard}${qs}`, { headers: getHeaders() });
   },
 
   // Accounts
   async listAccounts(): Promise<Account[]> {
-    const res = await fetch(`${API_BASE_URL}/accounts`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch accounts: ${res.status}`);
-    return res.json();
+    return apiRequest<Account[]>(API_ROUTES.accounts.list, { headers: getHeaders() });
   },
 
   async createAccount(data: AccountCreate): Promise<Account> {
-    const res = await fetch(`${API_BASE_URL}/accounts`, {
+    return apiRequest<Account>(API_ROUTES.accounts.list, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to create account: ${res.status}`);
-    return res.json();
   },
 
   async deleteAccount(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/accounts/${id}`, {
+    await fetchWithTimeout(API_ROUTES.accounts.detail(id), {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error(`Failed to delete account: ${res.status}`);
   },
 
   // Export
@@ -128,7 +115,7 @@ export const holdingsApi = {
     if (portfolio) params.set('portfolio', portfolio);
     if (accountId) params.set('account_id', String(accountId));
     const qs = params.toString() ? `?${params}` : '';
-    return `${API_BASE_URL}/export/csv${qs}`;
+    return `${API_ROUTES.export.csv}${qs}`;
   },
 
   // Portfolio Analysis
@@ -138,68 +125,53 @@ export const holdingsApi = {
     if (modelName) body.model_name = modelName;
     if (modelProvider) body.model_provider = modelProvider;
     if (analysisMode) body.analysis_mode = analysisMode;
-    const res = await fetch(`${API_BASE_URL}/portfolio/analyze`, {
+    return apiRequest<AnalysisJob>(API_ROUTES.portfolio.analyze, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Failed to start analysis: ${res.status}`);
-    return res.json();
   },
 
   async getAnalysisJob(jobId: number): Promise<AnalysisJob> {
-    const res = await fetch(`${API_BASE_URL}/portfolio/analyze/${jobId}`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch job: ${res.status}`);
-    return res.json();
+    return apiRequest<AnalysisJob>(API_ROUTES.portfolio.job(jobId), { headers: getHeaders() });
   },
 
   async getLatestAnalysis(): Promise<AnalysisResult[]> {
-    const res = await fetch(`${API_BASE_URL}/portfolio/analysis/latest`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch analysis: ${res.status}`);
-    return res.json();
+    return apiRequest<AnalysisResult[]>(API_ROUTES.portfolio.latestAnalysis, { headers: getHeaders() });
   },
 
   // Watchlist
   async listWatchlist(): Promise<WatchlistItem[]> {
-    const res = await fetch(`${API_BASE_URL}/watchlist`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch watchlist: ${res.status}`);
-    return res.json();
+    return apiRequest<WatchlistItem[]>(API_ROUTES.watchlist.list, { headers: getHeaders() });
   },
 
   async addToWatchlist(data: WatchlistCreate): Promise<WatchlistItem> {
-    const res = await fetch(`${API_BASE_URL}/watchlist`, {
+    return apiRequest<WatchlistItem>(API_ROUTES.watchlist.list, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Failed to add to watchlist: ${res.status}`);
-    return res.json();
   },
 
   async removeFromWatchlist(id: number): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/watchlist/${id}`, {
+    await fetchWithTimeout(API_ROUTES.watchlist.detail(id), {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    if (!res.ok) throw new Error(`Failed to remove from watchlist: ${res.status}`);
   },
 
   async analyzeWatchlist(watchlistIds?: number[], analysisMode?: string): Promise<AnalysisJob> {
     const body: Record<string, unknown> = {};
     if (watchlistIds) body.watchlist_ids = watchlistIds;
     if (analysisMode) body.analysis_mode = analysisMode;
-    const res = await fetch(`${API_BASE_URL}/watchlist/analyze`, {
+    return apiRequest<AnalysisJob>(API_ROUTES.watchlist.analyze, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Failed to start watchlist analysis: ${res.status}`);
-    return res.json();
   },
 
   async getLatestWatchlistAnalysis(): Promise<AnalysisResult[]> {
-    const res = await fetch(`${API_BASE_URL}/watchlist/analysis/latest`, { headers: getHeaders() });
-    if (!res.ok) throw new Error(`Failed to fetch watchlist analysis: ${res.status}`);
-    return res.json();
+    return apiRequest<AnalysisResult[]>(API_ROUTES.watchlist.latestAnalysis, { headers: getHeaders() });
   },
 };

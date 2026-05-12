@@ -1,8 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Shield } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_ROUTES, fetchWithTimeout, ApiTimeoutError } from '@/services/api-routes';
 
 function LoginScreen({ onLogin }: { onLogin: (key: string) => void }) {
   const [password, setPassword] = useState('');
@@ -15,7 +14,7 @@ function LoginScreen({ onLogin }: { onLogin: (key: string) => void }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/holdings/portfolios`, {
+      const res = await fetchWithTimeout(API_ROUTES.holdings.portfolios, {
         headers: { 'X-API-Key': password },
       });
 
@@ -27,8 +26,12 @@ function LoginScreen({ onLogin }: { onLogin: (key: string) => void }) {
       } else {
         setError('Cannot verify access');
       }
-    } catch {
-      setError('Cannot reach server');
+    } catch (err) {
+      if (err instanceof ApiTimeoutError) {
+        setError('Server not responding — please try again');
+      } else {
+        setError('Cannot reach server');
+      }
     } finally {
       setLoading(false);
     }
@@ -75,7 +78,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
       setAuthenticated(false);
       return;
     }
-    fetch(`${API_BASE_URL}/holdings/portfolios`, { headers: { 'X-API-Key': key } })
+    fetchWithTimeout(API_ROUTES.holdings.portfolios, { headers: { 'X-API-Key': key } })
       .then((res) => {
         if (res.ok) {
           setAuthenticated(true);
@@ -84,7 +87,10 @@ export function LoginGate({ children }: { children: ReactNode }) {
           setAuthenticated(false);
         }
       })
-      .catch(() => setAuthenticated(false));
+      .catch(() => {
+        localStorage.removeItem('app_api_key');
+        setAuthenticated(false);
+      });
   }, []);
 
   if (authenticated === null) {
