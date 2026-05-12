@@ -119,7 +119,10 @@ export function Dashboard() {
 
   const fetchLimits = useCallback(async () => {
     try {
-      const resp = await fetch('/api/portfolio/analysis/limits');
+      const key = localStorage.getItem('app_api_key');
+      const headers: Record<string, string> = {};
+      if (key) headers['X-API-Key'] = key;
+      const resp = await fetch('/portfolio/analysis/limits', { headers });
       if (resp.ok) setAnalysisLimits(await resp.json());
     } catch { /* non-critical */ }
   }, []);
