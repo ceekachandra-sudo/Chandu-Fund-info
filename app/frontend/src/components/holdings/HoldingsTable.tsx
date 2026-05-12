@@ -278,9 +278,9 @@ export function HoldingsTable({ holdings, analysisResults, onDelete }: HoldingsT
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm border-collapse">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-b-2 border-border bg-muted/30 text-left text-xs font-medium text-muted-foreground uppercase tracking-wide">
             {hasAnalysis && <th className="py-2 px-1 w-14"></th>}
             {hasAccounts && <th className="py-2 px-2">Account</th>}
             <th className="py-2 px-2">Ticker</th>
@@ -307,16 +307,16 @@ export function HoldingsTable({ holdings, analysisResults, onDelete }: HoldingsT
 
             return (
               <Fragment key={h.id}>
-                <tr className={`border-b border-border/50 hover:bg-muted/30 ${isExpanded ? 'bg-muted/20 border-b-0' : ''}`}>
+                <tr className={`border-b border-border/60 hover:bg-muted/40 transition-colors ${isExpanded ? 'bg-muted/20 border-b-0' : ''}`}>
                   {hasAnalysis && (
                     <td className="py-2 px-1">
                       {analysis && (
                         <button
                           onClick={() => toggleRow(h.id)}
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold transition-all ${
                             isExpanded
-                              ? 'bg-primary/10 text-primary border border-primary/30'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent'
+                              ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-sm'
+                              : 'bg-muted/60 text-foreground/70 hover:bg-muted hover:text-foreground border border-border/50'
                           }`}
                         >
                           {isExpanded ? <ChevronDown size={12} /> : <FileText size={12} />}

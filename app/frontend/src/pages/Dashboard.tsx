@@ -25,8 +25,15 @@ export function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Analysis mode
+  // Analysis mode & limits
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>('quick_scan');
+  const [analysisLimits, setAnalysisLimits] = useState<{
+    deep_dive_enabled?: boolean;
+    standard_used_today?: number;
+    standard_daily_limit?: number;
+    deep_dive_used_today?: number;
+    deep_dive_daily_limit?: number;
+  }>({});
 
   // Watchlist state
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -110,10 +117,18 @@ export function Dashboard() {
     }
   }, []);
 
+  const fetchLimits = useCallback(async () => {
+    try {
+      const resp = await fetch('/api/portfolio/analysis/limits');
+      if (resp.ok) setAnalysisLimits(await resp.json());
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { fetchLatestAnalysis(); }, [fetchLatestAnalysis]);
   useEffect(() => { fetchWatchlist(); }, [fetchWatchlist]);
+  useEffect(() => { fetchLimits(); }, [fetchLimits]);
 
   // Cleanup poll on unmount
   useEffect(() => {
@@ -161,13 +176,21 @@ export function Dashboard() {
 
   const handleAnalyze = async () => {
     if (analysisMode === 'deep_dive') {
-      setError('Deep Dive is disabled during beta to control costs. Use Quick Scan or Standard mode.');
-      return;
+      if (!analysisLimits.deep_dive_enabled) {
+        setError('Deep Dive is not enabled. Set DEEP_DIVE_ENABLED=true in environment.');
+        return;
+      }
+      const confirmed = window.confirm(
+        'Deep Dive is slower and uses more AI tokens. Use for selected stocks only.\n\n' +
+        `Daily limit: ${analysisLimits.deep_dive_daily_limit ?? 5} runs. ` +
+        `Used today: ${analysisLimits.deep_dive_used_today ?? 0}.\n\nContinue?`
+      );
+      if (!confirmed) return;
     }
 
     if (analysisMode === 'standard') {
       const confirmed = window.confirm(
-        `Standard analysis uses AI tokens (limited to 10 runs/day).\n\nQuick Scan is free and instant. Continue with Standard?`
+        `Standard analysis uses AI tokens (limited to ${analysisLimits.standard_daily_limit ?? 10} runs/day).\n\nQuick Scan is free and instant. Continue with Standard?`
       );
       if (!confirmed) return;
     }
@@ -300,18 +323,20 @@ export function Dashboard() {
                 onChange={(e) => setAnalysisMode(e.target.value as AnalysisMode)}
                 disabled={analyzing}
                 className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                title={analysisMode === 'quick_scan' ? 'Free — uses market data only' : analysisMode === 'standard' ? 'Uses AI (limited to 10/day)' : 'Disabled during beta'}
+                title={analysisMode === 'quick_scan' ? 'Free — uses market data only' : analysisMode === 'standard' ? `Uses AI (${analysisLimits.standard_used_today ?? 0}/${analysisLimits.standard_daily_limit ?? 10} today)` : 'Full multi-agent analysis'}
               >
                 <option value="quick_scan">Quick Scan (free)</option>
-                <option value="standard">Standard — 10/day limit</option>
-                <option value="deep_dive">Deep Dive (disabled)</option>
+                <option value="standard">{`Standard (${analysisLimits.standard_used_today ?? 0}/${analysisLimits.standard_daily_limit ?? 10})`}</option>
+                <option value="deep_dive" disabled={!analysisLimits.deep_dive_enabled}>
+                  {analysisLimits.deep_dive_enabled ? `Deep Dive (${analysisLimits.deep_dive_used_today ?? 0}/${analysisLimits.deep_dive_daily_limit ?? 5})` : 'Deep Dive (not enabled)'}
+                </option>
               </select>
               <Button
                 size="sm"
                 variant="default"
                 onClick={handleAnalyze}
                 disabled={analyzing || holdings.length === 0}
-                className="bg-purple-700 hover:bg-purple-600"
+                className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900"
               >
                 <Brain size={14} className={`mr-1 ${analyzing ? 'animate-pulse' : ''}`} />
                 {analyzing ? 'Analyzing...' : 'Analyze'}
@@ -417,7 +442,7 @@ export function Dashboard() {
                   variant="default"
                   onClick={handleAnalyzeWatchlist}
                   disabled={analyzing}
-                  className="bg-purple-700 hover:bg-purple-600"
+                  className="bg-slate-800 hover:bg-slate-700 dark:bg-slate-200 dark:hover:bg-slate-300 dark:text-slate-900"
                 >
                   <Brain size={14} className="mr-1" /> Analyze
                 </Button>
@@ -455,9 +480,9 @@ export function Dashboard() {
 
 function SummaryCard({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`text-lg font-semibold mt-1 ${className || ''}`}>{value}</div>
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className={`text-lg font-bold mt-1.5 tabular-nums ${className || ''}`}>{value}</div>
     </div>
   );
 }

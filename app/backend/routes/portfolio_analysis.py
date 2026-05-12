@@ -96,14 +96,14 @@ async def analyze_portfolio(data: AnalyzeRequest, db: Session = Depends(get_db))
     """
     from app.backend.services.rate_limiter import check_analysis_allowed, record_analysis
 
-    allowed, reason = check_analysis_allowed(data.analysis_mode)
-    if not allowed:
-        raise HTTPException(status_code=429, detail=reason)
-
     if data.holding_ids:
         total = len(data.holding_ids)
     else:
         total = db.query(Holding).count()
+
+    allowed, reason = check_analysis_allowed(data.analysis_mode, ticker_count=total)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
 
     if total == 0:
         raise HTTPException(status_code=400, detail="No holdings to analyze")

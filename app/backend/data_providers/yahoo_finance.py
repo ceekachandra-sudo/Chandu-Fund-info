@@ -52,11 +52,15 @@ class YahooFinanceProvider(DataProvider):
                     error_message=f"No price data returned for {ticker}",
                 )
 
+            # Flatten MultiIndex columns (yfinance returns ('Close', 'TICKER') for single tickers)
+            if isinstance(data.columns, __import__('pandas').MultiIndex):
+                data.columns = data.columns.get_level_values(0)
+
             pence_conversion = self._is_lse_pence(ticker)
             bars: list[PriceBar] = []
 
             for idx, row in data.iterrows():
-                ts = idx[0] if isinstance(idx, tuple) else idx
+                ts = idx
                 open_val = self._extract_val(row, "Open")
                 high_val = self._extract_val(row, "High")
                 low_val = self._extract_val(row, "Low")

@@ -15,7 +15,7 @@ const colorMap: Record<string, string> = {
 export function ActionBadge({ label }: ActionBadgeProps) {
   const colors = colorMap[label] || 'bg-muted text-muted-foreground border-border';
   return (
-    <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border', colors)}>
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold border shadow-sm', colors)}>
       {label}
     </span>
   );

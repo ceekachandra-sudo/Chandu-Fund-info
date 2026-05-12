@@ -83,12 +83,16 @@ def _yfinance_fallback(ticker: str, start_date: str, end_date: str) -> list[Pric
         if data.empty:
             return []
 
+        # Flatten MultiIndex columns (yfinance returns ('Close', 'TICKER') for single tickers)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
         # Yahoo Finance returns LSE-listed (.L) prices in GBp (pence) — convert to GBP
         pence_to_pounds = ticker.upper().endswith(".L")
 
         prices = []
         for idx, row in data.iterrows():
-            ts = idx[0] if isinstance(idx, tuple) else idx
+            ts = idx
             open_val = _extract_scalar(row.get("Open"))
             high_val = _extract_scalar(row.get("High"))
             low_val = _extract_scalar(row.get("Low"))
@@ -140,9 +144,11 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
         except Exception as e:
             logger.warning("Failed to parse price response for %s: %s", ticker, e)
 
-    # Fallback to yfinance if primary source returned nothing
-    if not prices:
-        prices = _yfinance_fallback(ticker, start_date, end_date)
+    # Fallback to yfinance if primary source returned insufficient data
+    if len(prices) < 5:
+        yf_prices = _yfinance_fallback(ticker, start_date, end_date)
+        if len(yf_prices) > len(prices):
+            prices = yf_prices
 
     if not prices:
         return []
