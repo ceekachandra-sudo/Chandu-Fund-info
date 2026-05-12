@@ -131,7 +131,7 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
@@ -176,7 +176,7 @@ def get_financial_metrics(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
@@ -212,7 +212,7 @@ def search_line_items(
     # If not in cache or insufficient data, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     url = "https://api.financialdatasets.ai/financials/search/line-items"
@@ -260,7 +260,7 @@ def get_insider_trades(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     all_trades = []
@@ -326,7 +326,7 @@ def get_company_news(
     # If not in cache, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
-    if financial_api_key:
+    if financial_api_key and not financial_api_key.startswith("your-"):
         headers["X-API-KEY"] = financial_api_key
 
     all_news = []
